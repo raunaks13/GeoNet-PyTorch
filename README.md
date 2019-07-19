@@ -1,6 +1,6 @@
 # GeoNet - PyTorch version
 
-**Note: This repository is a work in progress. Contributions are welcome. **
+**Note: This repository is a work in progress. Please review the details below. Contributions are welcome.**
 
 This codebase recreates the Rigid Flow Reconstructor of the following paper:
 
@@ -10,7 +10,7 @@ This codebase recreates the Rigid Flow Reconstructor of the following paper:
 
 The official TensorFlow implementation can be found [here](https://github.com/yzcjtr/GeoNet).
 
-This repository contains the code corresponding to `train_rigid=True` in the original paper, i.e. for using rigid flow to train depth and pose.
+This repository contains the code corresponding to `train_rigid=True` in the original paper, i.e. for reconstructing rigid flow to train depth and pose.
 
 ## Requirements
 This codebase was tested using PyTorch 1.0.0, CUDA 9.0, and Ubuntu 18.04 LTS.
