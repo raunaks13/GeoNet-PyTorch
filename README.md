@@ -57,3 +57,6 @@ There are a number of things which need to be added:
 * Adding a function to test pose (since the pose network is already trained)
 * Once these are done, the ResFlowNet for the NonRigid Motion Localizer can be implemented.
 
+## Acknowledgements
+
+The DepthNet and some utility functions were taken from [Clement Pinard's](https://github.com/ClementPinard/SfmLearner-Pytorch) implementation of SFMLearner in PyTorch. I have followed a similar file hierarchy as specified in [this](https://github.com/yijie0710/GeoNet_pytorch) unnoficial implementation.
