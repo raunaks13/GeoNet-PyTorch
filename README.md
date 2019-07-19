@@ -13,7 +13,7 @@ The official TensorFlow implementation can be found [here](https://github.com/yz
 This repository contains the code corresponding to `train_rigid=True` in the original paper, i.e. for reconstructing rigid flow to train depth and pose.
 
 ## Requirements
-This codebase was tested using PyTorch 1.0.0, CUDA 9.0, and Ubuntu 18.04 LTS.
+This codebase was tested using PyTorch 1.0.0, CUDA 9.0, Python 3.6 in Ubuntu 18.04 LTS.
 
 You can install the following packages using `pip`:
 
