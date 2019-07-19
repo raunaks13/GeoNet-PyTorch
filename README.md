@@ -26,6 +26,9 @@ opencv-python
 tensorboardX==1.7
 ```
 
+## Data Preparation
+Follow the instructions given in the [official repo](https://github.com/yzcjtr/GeoNet) for KITTI to download the training and testing datasets. 
+
 For evaluation, you will have to insert a `gt_depth.npy` file in the folder `models/gt_data`
 This ground truth depth file can be found [here](https://drive.google.com/open?id=1E9j6guYY2S_HXmUhkqw95IEmdevXyBqM). You are also welcome to use your own depth file - it's just a python list of depth maps for the KITTI testing dataset.
 
