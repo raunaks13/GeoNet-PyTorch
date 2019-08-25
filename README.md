@@ -48,7 +48,7 @@ Training has only been done for depth. For optimum performance, turn off `random
 
 Loss and image warping visualizations can be visualized using `tensorboardX`, for which functionality has been implemented.
 
-The current code achieves an absolute relative error of 0.27 on KITTI with a VGG backbone for the DepthNet and same hyperparameters as the original paper.
+The current code achieves an absolute relative error of 0.22 on KITTI with a VGG backbone for the DepthNet and same hyperparameters as the original paper.
 
 The original paper reports an absolute relative error of 0.164, so some hyperparameter tuning is still required.
 
