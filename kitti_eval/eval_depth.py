@@ -11,7 +11,7 @@ from depth_evaluation_utils import *
 parser = argparse.ArgumentParser()
 parser.add_argument("--split", type=str, default='eigen', help='eigen or stereo split')
 parser.add_argument("--kitti_dir", type=str, help='Path to the KITTI dataset directory', default="../../data/kitti_raw/")
-parser.add_argument("--pred_file", type=str, help="Path to the prediction file", default="/ceph/raunaks/lsd-signet/reconstruction/outputs/augfull/rigid__125000.npy")
+parser.add_argument("--pred_file", type=str, help="Path to the prediction file", default="/ceph/raunaks/GeoNet-PyTorch/reconstruction/outputs/bs-1/rigid__130000.npy")
 parser.add_argument('--min_depth', type=float, default=1e-3, help="Threshold for minimum depth")
 parser.add_argument('--max_depth', type=float, default=80, help="Threshold for maximum depth")
 args = parser.parse_args()
@@ -41,7 +41,7 @@ def convert_disps_to_depths_stereo(gt_disparities, pred_depths):
 
 def main():
     load_gt_from_file=False
-    load_gt_dir = "/ceph/raunaks/lsd-signet/reconstruction/models/gt_data/"
+    load_gt_dir = "/ceph/raunaks/GeoNet-PyTorch/reconstruction/models/gt_data/"
     
     if os.path.exists(load_gt_dir + "gt_depth.npy"):
         load_gt_from_file=True
@@ -51,7 +51,7 @@ def main():
     print(len(pred_depths))
     #TODO: Apparently pred_depths has one less depth file, it was probably dropped by the dataloader during prediction for some reason. Check it out.
     
-    args.test_file_list = '/ceph/raunaks/lsd-signet/reconstruction/data/kitti/test_files_%s.txt'%args.split
+    args.test_file_list = '/ceph/raunaks/GeoNet-PyTorch/reconstruction/data/kitti/test_files_%s.txt'%args.split
 
     print('evaluating ' + args.pred_file + '...')
     
@@ -69,7 +69,7 @@ def main():
         pred_depths_resized = []
         
         #Temporary fix: Let num_test equal len(pred_depths)
-        num_test = len(pred_depths)
+        #num_test = len(pred_depths)
         for t_id in range(num_test):
             if load_gt_from_file:
                 img_size_h, img_size_w = loaded_gt_depths[t_id].shape

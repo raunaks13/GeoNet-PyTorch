@@ -8,7 +8,7 @@ def downconv(in_chnls,out_chnls, kernel_size):
     return nn.Sequential(
         nn.Conv2d(in_chnls, out_chnls, kernel_size=kernel_size,
                   stride=2, padding=(kernel_size-1)//2),
-        nn.BatchNorm2d(out_chnls, eps=0.001, momentum=0.001),
+        #nn.BatchNorm2d(out_chnls, eps=0.001, momentum=0.001),
         #Default: nn.BatchNorm2d(in_chnls, eps=1e-5, momentum=0.1)
         nn.ReLU(inplace=True)
     )

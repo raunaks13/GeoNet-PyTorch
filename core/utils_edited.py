@@ -1,13 +1,8 @@
 import torch
 import torch.nn.functional as F
-# from torch.autograd import Variable
 import math
 import numpy as np
-# from torchvision.transforms import Resize
 
-# def resize_2d(img, size):
-#     # Support resizin on GPU
-#     return (F.adaptive_avg_pool2d(Variable(img, volatile=True), size)).data
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 

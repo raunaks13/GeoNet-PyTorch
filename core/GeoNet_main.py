@@ -1,14 +1,14 @@
 import argparse
 import torch
 from GeoNet_model import GeoNetModel
-import yaml
+import os
 
 def main():
     
     # When training/testing change --istrain, and the set of parameters specified below
     parser = argparse.ArgumentParser('description: GeoNet')
     
-    parser.add_argument('--is_train', default=False, type=bool,
+    parser.add_argument('--is_train', default=0, type=int,
                         help='whether to train or test')
     
     # Generally fixed parameters
@@ -16,7 +16,7 @@ def main():
                         help='whether to train full flow or not')
     parser.add_argument('--sequence_length', default=3, type=int,
                         help='sequence length for each example')
-    parser.add_argument('--batch_size', default=4, type=int,
+    parser.add_argument('--batch_size', default=1, type=int,
                         help='size of a sample batch')
     parser.add_argument('--epochs', default=30, type=int,
                         help='number of epochs to train on KITTI')
@@ -35,22 +35,22 @@ def main():
 
     # Dataset directories
     parser.add_argument('--data_dir', default='/ceph/data/kitti_eigen_full/', 
-                    help='directory of training dataset')   
+                    help='directory of training dataset') 
     parser.add_argument('--test_dir', default='/ceph/data/kitti_raw/',
                         help='directory of testing dataset')
     
     # To edit during training
-    parser.add_argument('--ckpt_dir', default='/ceph/raunaks/lsd-signet/reconstruction/models/augfull',
+    parser.add_argument('--ckpt_dir', default='/ceph/raunaks/GeoNet-PyTorch/reconstruction/models/no-bn',
                         help='directory to save checkpoints')
-    parser.add_argument('--graphs_dir', default='/ceph/raunaks/lsd-signet/reconstruction/graphs/augfull', 
+    parser.add_argument('--graphs_dir', default='/ceph/raunaks/GeoNet-PyTorch/reconstruction/graphs/no-bn', 
                         help='directory to store tensorboard images and scalars')
     parser.add_argument('--output_ckpt_iter', default=5000, type=int,
                         help='interval to save checkpoints')
     
     # To edit during evaluation
-    parser.add_argument('--outputs_dir', default='/ceph/raunaks/lsd-signet/reconstruction/outputs/',
+    parser.add_argument('--outputs_dir', default='/ceph/raunaks/GeoNet-PyTorch/reconstruction/outputs/',
                         help='outer directory to save output depth models')
-    parser.add_argument('--ckpt_index', default=125000, type=int,
+    parser.add_argument('--ckpt_index', default=150000, type=int,
                         help='the model index to consider while evaluating')
     
     # Training hyperparameters
@@ -78,7 +78,11 @@ def main():
     """
     
     args = parser.parse_args()
-    
+
+    import json
+    with open('/ceph/raunaks/GeoNet-PyTorch/reconstruction/' + os.path.basename(args.graphs_dir) + '.txt', "w") as f:
+        json.dump(args.__dict__, f, indent=2)
+
     if torch.cuda.is_available():
         print("CUDA available")
         device = torch.device('cuda')
