@@ -1,9 +1,9 @@
 #!/bin/bash
 
 IS_TRAIN=0
-BASE_DIR="bs-1"
+BASE_DIR="new-0"
 
-for i in {130000..300000..5000}; do
+for i in {10000..100000..5000}; do
     CKPT_INDEX=$i
     CKPT_DIR="/ceph/raunaks/GeoNet-PyTorch/reconstruction/models/${BASE_DIR}"
     PRED_FILE="/ceph/raunaks/GeoNet-PyTorch/reconstruction/outputs/${BASE_DIR}/rigid__${CKPT_INDEX}.npy"

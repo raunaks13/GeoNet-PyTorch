@@ -1,127 +1,159 @@
-# Mostly based on the code written by Clement Godard: 
+# Mostly based on the code written by Clement Godard:
 # https://github.com/mrharicot/monodepth/blob/master/utils/evaluation_utils.py
 import numpy as np
-import os
-import cv2
 from collections import Counter
-import pickle
+from path import Path
+#from scipy.misc import imread
+from imageio import imread
+from tqdm import tqdm
+import datetime
 
-def compute_errors(gt, pred):
-    thresh = np.maximum((gt / pred), (pred / gt))
-    a1 = (thresh < 1.25   ).mean()
-    a2 = (thresh < 1.25 ** 2).mean()
-    a3 = (thresh < 1.25 ** 3).mean()
 
-    rmse = (gt - pred) ** 2
-    rmse = np.sqrt(rmse.mean())
+class test_framework_KITTI(object):
+    def __init__(self, root, test_files, seq_length=3, min_depth=1e-3, max_depth=100, step=1, use_gps=True):
+        self.root = root
+        self.min_depth, self.max_depth = min_depth, max_depth
+        self.use_gps = use_gps
+        self.calib_dirs, self.gt_files, self.img_files, self.displacements, self.cams = read_scene_data(self.root,
+                                                                                                        test_files,
+                                                                                                        seq_length,
+                                                                                                        step,
+                                                                                                        self.use_gps)
 
-    rmse_log = (np.log(gt) - np.log(pred)) ** 2
-    rmse_log = np.sqrt(rmse_log.mean())
+    def __getitem__(self, i):
+        tgt = imread(self.img_files[i][0]).astype(np.float32)
+        depth = generate_depth_map(self.calib_dirs[i], self.gt_files[i], tgt.shape[:2], self.cams[i])
+        return {'tgt': tgt,
+                'ref': [imread(img).astype(np.float32) for img in self.img_files[i][1]],
+                'path':self.img_files[i][0],
+                'gt_depth': depth,
+                'displacements': np.array(self.displacements[i]),
+                'mask': generate_mask(depth, self.min_depth, self.max_depth)
+                }
 
-    abs_rel = np.mean(np.abs(gt - pred) / gt)
-
-    sq_rel = np.mean(((gt - pred)**2) / gt)
-
-    return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
-
-###############################################################################
-#######################  KITTI
-
-width_to_focal = dict()
-width_to_focal[1242] = 721.5377
-width_to_focal[1241] = 718.856
-width_to_focal[1224] = 707.0493
-width_to_focal[1238] = 718.3351
-
-def load_gt_disp_kitti(path):
-    gt_disparities = []
-    for i in range(200):
-        disp = cv2.imread(path + "/training/disp_noc_0/" + str(i).zfill(6) + "_10.png", -1)
-        disp = disp.astype(np.float32) / 256
-        gt_disparities.append(disp)
-    return gt_disparities
-
-def convert_disps_to_depths_kitti(gt_disparities, pred_disparities):
-    gt_depths = []
-    pred_depths = []
-    pred_disparities_resized = []
-    
-    for i in range(len(gt_disparities)):
-        gt_disp = gt_disparities[i]
-        height, width = gt_disp.shape
-
-        pred_disp = pred_disparities[i]
-        pred_disp = width * cv2.resize(pred_disp, (width, height), interpolation=cv2.INTER_LINEAR)
-
-        pred_disparities_resized.append(pred_disp) 
-
-        mask = gt_disp > 0
-
-        gt_depth = width_to_focal[width] * 0.54 / (gt_disp + (1.0 - mask))
-        pred_depth = width_to_focal[width] * 0.54 / pred_disp
-
-        gt_depths.append(gt_depth)
-        pred_depths.append(pred_depth)
-    return gt_depths, pred_depths, pred_disparities_resized
+    def __len__(self):
+        return len(self.img_files)
 
 
 ###############################################################################
-#######################  EIGEN
+#  EIGEN
 
-def read_text_lines(file_path):
-    f = open(file_path, 'r')
-    lines = f.readlines()
-    f.close()
-    lines = [l.rstrip() for l in lines]
-    return lines
+def getXYZ(lat, lon, alt):
+    """Helper method to compute a R(3) pose vector from an OXTS packet.
+    Unlike KITTI official devkit, we use sinusoidal projection (https://en.wikipedia.org/wiki/Sinusoidal_projection)
+    instead of mercator as it is much simpler.
+    Initially Mercator was used because it renders nicely for Odometry vizualisation, but we don't need that here.
+    In order to avoid problems for potential other runs closer to the pole in the future,
+    we stick to sinusoidal which keeps the distances cleaner than mercator (and that's the only thing we want here)
+    See https://github.com/utiasSTARS/pykitti/issues/24
+    """
+    er = 6378137.  # earth radius (approx.) in meters
+    scale = np.cos(lat * np.pi / 180.)
+    tx = scale * lon * np.pi * er / 180.
+    ty = er * lat * np.pi / 180.
+    tz = alt
+    t = np.array([tx, ty, tz])
+    return t
 
-def read_file_data(files, data_root):
+
+def get_displacements_from_GPS(root, date, scene, indices, tgt_index, precision_warning_threshold=2):
+    """gets displacement magntidues between middle frame and other frames, this is, to a scaling factor
+    the mean output PoseNet should have for translation. Since the scaling is the same factor for depth maps and
+    for translations, it will be used to determine how much predicted depth should be multiplied to."""
+
+    first_pose = None
+    displacements = []
+    oxts_root = root/date/scene/'oxts'
+    if len(indices) == 0:
+        return 0
+    reordered_indices = [indices[tgt_index]] + [*indices[:tgt_index]] + [*indices[tgt_index + 1:]]
+    already_warned = False
+    for index in reordered_indices:
+        oxts_data = np.genfromtxt(oxts_root/'data'/'{:010d}.txt'.format(index))
+
+        if not already_warned:
+            position_precision = oxts_data[23]
+            if position_precision > precision_warning_threshold:
+                print("Warning for scene {} frame {} : bad position precision from oxts ({:.2f}m). "
+                      "You might want to get displacements from speed".format(scene, index, position_precision))
+            already_warned = True
+
+        lat, lon, alt = oxts_data[:3]
+        pose = getXYZ(lat, lon, alt)
+        if first_pose is None:
+            first_pose = pose
+        else:
+            displacements.append(np.linalg.norm(pose - first_pose))
+    return displacements
+
+
+def get_displacements_from_speed(root, date, scene, indices, tgt_index):
+    """get displacement magnitudes by integrating over speed values.
+    Might be a good alternative if the GPS is not good enough"""
+    if len(indices) == 0:
+        return []
+    oxts_root = root/date/scene/'oxts'
+    with open(oxts_root/'timestamps.txt') as f:
+        timestamps = np.array([datetime.datetime.strptime(ts[:-3], "%Y-%m-%d %H:%M:%S.%f").timestamp() for ts in f.read().splitlines()])
+    speeds = np.zeros((len(indices), 3))
+    for i, index in enumerate(indices):
+        oxts_data = np.genfromtxt(oxts_root/'data'/'{:010d}.txt'.format(index))
+        speeds[i] = oxts_data[[6,7,10]]
+    displacements = np.zeros((len(indices), 3))
+    # Perform the integration operation, using trapezoidal method
+    for i0, (i1, i2) in enumerate(zip(indices, indices[1:])):
+        displacements[i0 + 1] = displacements[i0] + 0.5*(speeds[i0] + speeds[i0 + 1]) * (timestamps[i1] - timestamps[i2])
+    # Set the origin of displacements at tgt_index
+    displacements -= displacements[tgt_index]
+    # Finally, get the displacement magnitude relative to tgt and discard the middle value (which is supposed to be 0)
+    displacements_mag = np.linalg.norm(displacements, axis=1)
+    return np.concatenate([displacements_mag[:tgt_index], displacements_mag[tgt_index + 1:]])
+
+
+def read_scene_data(data_root, test_list, seq_length=3, step=1, use_gps=True):
+    data_root = Path(data_root)
     gt_files = []
-    gt_calib = []
-    im_sizes = []
+    calib_dirs = []
     im_files = []
     cams = []
-    num_probs = 0
-    for filename in files:
-        filename = filename.split()[0]
-        splits = filename.split('/')
-#         camera_id = filename[-1]   # 2 is left, 3 is right
-        date = splits[0]
-        im_id = splits[4][:10]
-        file_root = '{}/{}'
-        
-        im = filename
-        vel = '{}/{}/velodyne_points/data/{}.bin'.format(splits[0], splits[1], im_id)
+    displacements = []
+    demi_length = (seq_length - 1) // 2
+    shift_range = step * np.arange(-demi_length, demi_length + 1)
 
-        if os.path.isfile(data_root + im):
-            gt_files.append(data_root + vel)
-            gt_calib.append(data_root + date + '/')
-            im_sizes.append(cv2.imread(data_root + im).shape[:2])
-            im_files.append(data_root + im)
-            cams.append(2)
+    print('getting test metadata ... ')
+    for sample in tqdm(test_list):
+        tgt_img_path = data_root/sample
+        date, scene, cam_id, _, index = sample[:-4].split('/')
+
+        scene_length = len(tgt_img_path.parent.files('*.png'))
+
+        ref_indices = shift_range + np.clip(int(index), step*demi_length, scene_length - step*demi_length - 1)
+
+        ref_imgs_path = [tgt_img_path.dirname()/'{:010d}.png'.format(i) for i in ref_indices]
+        vel_path = data_root/date/scene/'velodyne_points'/'data'/'{}.bin'.format(index[:10])
+
+        if tgt_img_path.isfile():
+            gt_files.append(vel_path)
+            calib_dirs.append(data_root/date)
+            im_files.append([tgt_img_path,ref_imgs_path])
+            cams.append(int(cam_id[-2:]))
+
+            args = (data_root, date, scene, ref_indices, demi_length)
+            if use_gps:
+                displacements.append(get_displacements_from_GPS(*args))
+            else:
+                displacements.append(get_displacements_from_speed(*args))
         else:
-            num_probs += 1
-            print('{} missing'.format(data_root + im))
-    # print(num_probs, 'files missing')
+            print('{} missing'.format(tgt_img_path))
 
-    return gt_files, gt_calib, im_sizes, im_files, cams
+    return calib_dirs, gt_files, im_files, displacements, cams
+
 
 def load_velodyne_points(file_name):
     # adapted from https://github.com/hunse/kitti
     points = np.fromfile(file_name, dtype=np.float32).reshape(-1, 4)
-    points[:, 3] = 1.0  # homogeneous
+    points[:,3] = 1
     return points
-
-
-def lin_interp(shape, xyd):
-    # taken from https://github.com/hunse/kitti
-    m, n = shape
-    ij, d = xyd[:, 1::-1], xyd[:, 2]
-    f = LinearNDInterpolator(ij, d, fill_value=0)
-    J, I = np.meshgrid(np.arange(n), np.arange(m))
-    IJ = np.vstack([I.flatten(), J.flatten()]).T
-    disparity = f(IJ).reshape(shape)
-    return disparity
 
 
 def read_calib_file(path):
@@ -136,7 +168,7 @@ def read_calib_file(path):
             if float_chars.issuperset(value):
                 # try to cast to float array
                 try:
-                    data[key] = np.array(map(float, value.split(' ')))
+                    data[key] = np.array(list(map(float, value.split(' '))))
                 except ValueError:
                     # casting error: data[key] already eq. value, so pass
                     pass
@@ -144,33 +176,15 @@ def read_calib_file(path):
     return data
 
 
-def get_focal_length_baseline(calib_dir, cam=2):
-    cam2cam = read_calib_file(calib_dir + 'calib_cam_to_cam.txt')
-    P2_rect = cam2cam['P_rect_02'].reshape(3,4)
-    P3_rect = cam2cam['P_rect_03'].reshape(3,4)
-
-    # cam 2 is left of camera 0  -6cm
-    # cam 3 is to the right  +54cm
-    b2 = P2_rect[0,3] / -P2_rect[0,0]
-    b3 = P3_rect[0,3] / -P3_rect[0,0]
-    baseline = b3-b2
-
-    if cam==2:
-        focal_length = P2_rect[0,0]
-    elif cam==3:
-        focal_length = P3_rect[0,0]
-
-    return focal_length, baseline
-
-
 def sub2ind(matrixSize, rowSub, colSub):
     m, n = matrixSize
     return rowSub * (n-1) + colSub - 1
 
-def generate_depth_map(calib_dir, velo_file_name, im_shape, cam=2, interp=False, vel_depth=False):
+
+def generate_depth_map(calib_dir, velo_file_name, im_shape, cam=2):
     # load calibration files
-    cam2cam = read_calib_file(calib_dir + 'calib_cam_to_cam.txt')
-    velo2cam = read_calib_file(calib_dir + 'calib_velo_to_cam.txt')
+    cam2cam = read_calib_file(calib_dir/'calib_cam_to_cam.txt')
+    velo2cam = read_calib_file(calib_dir/'calib_velo_to_cam.txt')
     velo2cam = np.hstack((velo2cam['R'].reshape(3,3), velo2cam['T'][..., np.newaxis]))
     velo2cam = np.vstack((velo2cam, np.array([0, 0, 0, 1.0])))
 
@@ -187,10 +201,7 @@ def generate_depth_map(calib_dir, velo_file_name, im_shape, cam=2, interp=False,
 
     # project the points to the camera
     velo_pts_im = np.dot(P_velo2im, velo.T).T
-    velo_pts_im[:, :2] = velo_pts_im[:,:2] / velo_pts_im[:,2][..., np.newaxis]
-
-    if vel_depth:
-        velo_pts_im[:, 2] = velo[:, 0]
+    velo_pts_im[:, :2] = velo_pts_im[:,:2] / velo_pts_im[:,-1:]
 
     # check if in bounds
     # use minus 1 to get the exact same value as KITTI matlab code
@@ -206,20 +217,26 @@ def generate_depth_map(calib_dir, velo_file_name, im_shape, cam=2, interp=False,
 
     # find the duplicate points and choose the closest depth
     inds = sub2ind(depth.shape, velo_pts_im[:, 1], velo_pts_im[:, 0])
-    dupe_inds = [item for item, count in Counter(inds).iteritems() if count > 1]
+    dupe_inds = [item for item, count in Counter(inds).items() if count > 1]
     for dd in dupe_inds:
-        pts = np.where(inds==dd)[0]
+        pts = np.where(inds == dd)[0]
         x_loc = int(velo_pts_im[pts[0], 0])
         y_loc = int(velo_pts_im[pts[0], 1])
         depth[y_loc, x_loc] = velo_pts_im[pts, 2].min()
-    depth[depth<0] = 0
-
-    if interp:
-        # interpolate the depth map to fill in holes
-        depth_interp = lin_interp(im_shape, velo_pts_im)
-        return depth, depth_interp
-    else:
-        return depth
+    depth[depth < 0] = 0
+    return depth
 
 
+def generate_mask(gt_depth, min_depth, max_depth):
+    mask = np.logical_and(gt_depth > min_depth,
+                          gt_depth < max_depth)
+    # crop used by Garg ECCV16 to reprocude Eigen NIPS14 results
+    # if used on gt_size 370x1224 produces a crop of [-218, -3, 44, 1180]
+    gt_height, gt_width = gt_depth.shape
+    crop = np.array([0.40810811 * gt_height, 0.99189189 * gt_height,
+                     0.03594771 * gt_width,  0.96405229 * gt_width]).astype(np.int32)
 
+    crop_mask = np.zeros(mask.shape)
+    crop_mask[crop[0]:crop[1],crop[2]:crop[3]] = 1
+    mask = np.logical_and(mask, crop_mask)
+    return mask

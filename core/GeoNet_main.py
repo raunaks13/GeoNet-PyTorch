@@ -16,7 +16,7 @@ def main():
                         help='whether to train full flow or not')
     parser.add_argument('--sequence_length', default=3, type=int,
                         help='sequence length for each example')
-    parser.add_argument('--batch_size', default=1, type=int,
+    parser.add_argument('--batch_size', default=4, type=int,
                         help='size of a sample batch')
     parser.add_argument('--epochs', default=30, type=int,
                         help='number of epochs to train on KITTI')

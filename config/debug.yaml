@@ -1,0 +1,47 @@
+
+is_train: True
+data_workers: 16
+data: /ceph/raunaks/lsd-signet/reconstruction/kitti_eigen_full/
+#data: /ceph/raunaks/lsd-signet/reconstruction/kitti_eigen_full/
+test_data: /ceph/data/kitti_raw/
+sequence_length: 3
+
+# Both need to be multiples of 16 for generating disparity maps
+img_height: 128
+img_width: 416
+
+# Training
+save_from_ckpt: False
+ckpt_dir: /ceph/raunaks/lsd-signet/reconstruction/models/debuggy
+
+graphs_dir: /ceph/raunaks/lsd-signet/reconstruction/graphs/debuggy
+learning_rate: 0.00009
+batch_size: 4
+save_ckpt_iter: 5000
+
+#epochs: 30  #For KITTI: 300000 iters * batch_size/num_images ~ 29.8
+#epochs: 40 #For SYNTHIA: ballpark figure
+#epoch_size: 100
+epochs: 1
+epoch_size: 1
+
+seed: 8964
+dispnet_encoder: 'VGG-16'
+disparity_scale_normalize: False
+momentum: 0.9
+beta: 0.999
+weight_decay: 0
+epoch: 1000
+flow_scale_factor: 0.1
+num_scales: 4
+
+alpha_recon_image: 0.85
+lambda_rw: 1.0
+lambda_ds: 0.5
+#lambda_rw: 3.0
+#lambda_ds: 0.1
+lambda_fw: 1.0
+lambda_fs: 0.2
+lambda_gc: 0.2
+geometric_consistency_alpha: 1
+geometric_consistency_beta: 1

@@ -1,7 +1,5 @@
 # GeoNet - PyTorch version
 
-**Note: This repository is a work in progress. Please review the details below. Contributions are welcome.**
-
 This codebase recreates the Rigid Flow Reconstructor of the following paper:
 
 > [GeoNet](https://arxiv.org/pdf/1803.02276.pdf): Unsupervised Learning of Dense Depth, Optical Flow, and Camera Pose (CVPR 2018)
@@ -40,26 +38,26 @@ Further information can be found in `GeoNet_main.py.`
 
 To train DepthNet and PoseNet: `bash run.sh`
 
-To test and evaluate depth: `bash eval_depth.sh`
+To test and evaluate depth: `python3 test_disp.py`
 
 ## Results
 
-Training has only been done for depth. For optimum performance, turn off `random_coloring` during data augmentation.
+Training has only been done for depth.
 
 Loss and image warping visualizations can be visualized using `tensorboardX`, for which functionality has been implemented.
 
-The current code achieves an absolute relative error of 0.22 on KITTI with a VGG backbone for the DepthNet and same hyperparameters as the original paper.
+The current code achieves an absolute relative error of 0.173 on KITTI with an SfmLearner VGG backbone for the DepthNet and same hyperparameters as the original paper. These results have been achieved without experimenting with the random seed. I expect that doing so will result in matching with the result of the paper. 
 
-The original paper reports an absolute relative error of 0.164, so some hyperparameter tuning is still required.
+The original paper reports an absolute relative error of 0.164. 
 
 ## Contributing
 
-There are a number of things which need to be added:
+There are a number of things which can be added:
 
-* Perfecting the result on depth (network tuning)
 * Adding a function to test pose (since the pose network is already trained)
-* Once these are done, the ResFlowNet for the NonRigid Motion Localizer can be implemented.
+* The ResFlowNet for the NonRigid Motion Localizer can be implemented.
 
 ## Acknowledgements
 
 The DepthNet and some utility functions were taken from [Clement Pinard's](https://github.com/ClementPinard/SfmLearner-Pytorch) implementation of SFMLearner in PyTorch. I have followed a similar file hierarchy as specified in [this](https://github.com/yijie0710/GeoNet_pytorch) unnoficial implementation.
+

@@ -8,6 +8,7 @@ import torch.optim
 import DispNetS
 import FlowNet
 import PoseNet
+#import DispUnet
 from sequence_folders import SequenceFolder
 from sequence_folders import testSequenceFolder
 from loss_functions import *
@@ -23,37 +24,7 @@ class GeoNetModel(object):
     def __init__(self, args, device):
         self.args = args
         
-        """
-        self.config = config
-        
-        self.num_source = self.config['sequence_length'] - 1
-        self.batch_size = self.config['batch_size']
-        self.num_scales = torch.tensor(config['num_scales'])
-        self.simi_alpha = torch.tensor(
-            config['alpha_recon_image']).float().to(device)
-        self.geometric_consistency_alpha = torch.tensor(
-            config['geometric_consistency_alpha']).float().to(device)
-        self.geometric_consistency_beta = torch.tensor(
-            config['geometric_consistency_beta']).float().to(device)
-        self.loss_weight_rigid_warp = torch.tensor(     # 1.0
-            config['lambda_rw']).float().to(device)
-        self.loss_weight_disparity_smooth = torch.tensor(   # 0.5
-            config['lambda_ds']).float().to(device)
-        self.loss_weight_full_warp = torch.tensor(
-            config['lambda_fw']).float().to(device)
-        self.loss_weigtht_full_smooth = torch.tensor(
-            config['lambda_fs']).float().to(device)
-        self.loss_weight_geometrical_consistency = torch.tensor(
-            config['lambda_gc']).float().to(device)
-        
-        self.epochs = self.config['epochs']
-        self.epoch_size = self.config['epoch_size']
-        self.output_ckpt_iter = self.config['save_ckpt_iter']
-        self.train_flow = train_flow
-        self.is_train = self.config['is_train']
-        """
         # Nets preparation
-        #self.disp_net = DispNet.DispNet()
         self.disp_net = DispNetS.DispNetS()
         self.pose_net = PoseNet.PoseNet(args.num_source)
         
@@ -95,7 +66,7 @@ class GeoNetModel(object):
                     self.flow_net.init_weight()
         """
 
-        cudnn.benchmark = True
+        #cudnn.benchmark = True
         # for multiple GPUs
         #self.disp_net = torch.nn.DataParallel(self.disp_net)
         #self.pose_net = torch.nn.DataParallel(self.pose_net)
@@ -124,7 +95,7 @@ class GeoNetModel(object):
         tgt_view = tgt_view.to(device).float()
         tgt_view *= 1./255.
         self.tgt_view = tgt_view*2.0 - 1.0
-
+    
         #shape:  #scale, #batch, #chnls, h,w
         self.tgt_view_pyramid = scale_pyramid(self.tgt_view, args.num_scales)
         #shape:  #scale, #batch*#src_views, #chnls,h,w
@@ -142,16 +113,18 @@ class GeoNetModel(object):
     def iter_data_preparation(self, sampled_batch):
         args = self.args
         # sampled_batch: tgt_view, src_views, intrinsics
-        # shape: batch,chnls h,w
+        
+        # shape: batch, ch, h,w
         tgt_view = sampled_batch[0]
-        # shape: batch,num_source,chnls,h,w
+        
+        # shape: batch, num_source*ch, h, w
         src_views = sampled_batch[1]
-        # shape: batch,3,3
+        
+        # shape: batch, 3, 3
         intrinsics = sampled_batch[2]
+        
         # The images here are integral (0-255)
-                
-        # to device
-        # shape: #batch,3,h,w
+        # shape: batch, 3, h, w
         self.tgt_view = tgt_view.to(device).float()
         self.tgt_view *= 1./255.
         self.tgt_view = self.tgt_view*2. - 1.
@@ -162,7 +135,7 @@ class GeoNetModel(object):
         #print(self.src_views, self.tgt_view)
         
         self.intrinsics = intrinsics.to(device).float()
-        # shape: b*src_views,6,h,w
+        # shape: b*src_views,3,h,w
         self.src_views_concat = torch.cat([
             self.src_views[:, 3*s:3*(s + 1), :, :]
             for s in range(args.num_source)
@@ -268,6 +241,7 @@ class GeoNetModel(object):
         self.fwd_rigid_flow_pyramid = []
         self.bwd_rigid_flow_pyramid = []
 
+        #print(self.depth[0].shape)
         for scale in range(args.num_scales):    #num_scales is 4
 
             for src in range(args.num_source):  #num_source is 2
@@ -278,7 +252,7 @@ class GeoNetModel(object):
                 # (4, h, w, 2) for each particular scale
                 fwd_rigid_flow = compute_rigid_flow( # Checks out
                     self.poses[:, src, :],
-                    self.depth[scale][:args.batch_size, :, :],
+                    self.depth[scale][:args.batch_size, :, :], #the first disparity
                     self.multi_scale_intrinsices[:, scale, :, :], False)
         
                 # (4, h, w, 2)
@@ -621,7 +595,6 @@ class GeoNetModel(object):
             img_width=args.img_width,
             sequence_length=args.sequence_length)
 
-        #TODO: TURN SHUFFLE ON LATER
         print('Constructing dataloader object...')
         self.train_loader = torch.utils.data.DataLoader(
             self.train_set,
@@ -670,7 +643,7 @@ class GeoNetModel(object):
         self.test_loader = torch.utils.data.DataLoader(
             self.test_set,
             shuffle=False,
-            drop_last=True,
+            drop_last=False,
             num_workers=args.data_workers,
             batch_size=args.batch_size,
             pin_memory=True)
@@ -680,7 +653,7 @@ class GeoNetModel(object):
         pred_all = []
         for i, sampled_batch in enumerate(self.test_loader):
             """
-            Length of test_loader: num_sequences/4
+            Length of test_loader: number of sequences/4
             sampled_batch : [batch_size, channels, height, width]
             """
 
@@ -692,7 +665,7 @@ class GeoNetModel(object):
             pred = self.depth[0]
             # pred: (batch_size, height, width)
             
-            for b in range(args.batch_size):
+            for b in range(sampled_batch.shape[0]):
                 pred_all.append(pred[b, :, :].cpu().numpy())
 
         

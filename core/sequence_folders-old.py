@@ -24,7 +24,7 @@ def make_sequence_views(img_path, sequence_length, width):
     # shape: (h, w, chnls)
     src_views = np.concatenate(src_views,axis=2)
     
-    return tgt_view, src_views
+    return torch.as_tensor(tgt_view), torch.as_tensor(src_views)
 
 def make_intrinsics(cam_path):
     f = open(cam_path, 'r')
@@ -39,30 +39,6 @@ def make_resized_intrinsics_matrix(fx, fy, cx, cy):
     return intrinsics
 
 def data_augmentation(im, intrinsics, out_h, out_w):
-    
-    def random_scale_and_crop(images, intrinsics):
-        
-        assert intrinsics is not None
-        output_intrinsics = np.copy(intrinsics)
-
-        in_h, in_w, _ = images.shape
-        x_scaling, y_scaling = np.random.uniform(1.55, 1.70, 2)
-        scaled_h, scaled_w = int(in_h * y_scaling), int(in_w * x_scaling)
-
-        output_intrinsics[0] *= x_scaling
-        output_intrinsics[1] *= y_scaling
-        
-        scaled_images = cv2.resize(im, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
-
-        offset_y = np.random.randint(scaled_h - out_h + 1)
-        offset_x = np.random.randint(scaled_w - out_w + 1)
-
-        cropped_images = scaled_images[offset_y:offset_y + out_h, offset_x:offset_x + out_w, :]
-        
-        output_intrinsics[0,2] -= offset_x
-        output_intrinsics[1,2] -= offset_y
-
-        return cropped_images, output_intrinsics
     
     def random_scaling(im, intrinsics):
         """Inputs images with integer values"""
@@ -123,15 +99,14 @@ def data_augmentation(im, intrinsics, out_h, out_w):
         
         return im_aug
 
-    #im, intrinsics = random_scaling(im, intrinsics)
-    #im, intrinsics = random_cropping(im, intrinsics, out_h, out_w)
-    cropped_images, output_intrinsics = random_scale_and_crop(im, intrinsics)
-    
-    #im = torch.as_tensor(im).to(torch.uint8, non_blocking=True)
+    im, intrinsics = random_scaling(im, intrinsics)
+    im, intrinsics = random_cropping(im, intrinsics, out_h, out_w)
+
+    im = torch.as_tensor(im).to(torch.uint8, non_blocking=True)
     #do_augment = torch.rand(1)
     #im = random_coloring(im) if do_augment > 0.5 else im
 
-    return cropped_images, output_intrinsics
+    return im, intrinsics
 
 def get_multi_scale_intrinsics(intrinsics, num_scales):
     intrinsics_mscale = []
@@ -159,7 +134,7 @@ class testSequenceFolder(torch.utils.data.Dataset):
         #random.shuffle(self.example_names)
 
         self.sequence_length = sequence_length
-        self.img_width = img_width
+        self.width = img_width
         self.img_height = img_height
 
         self.imgs = [name + '.png' for name in self.example_names]
@@ -170,7 +145,7 @@ class testSequenceFolder(torch.utils.data.Dataset):
         raw_im = np.array(imread(self.imgs[index]))
         # raw_im: Around (375, 1242, 3) for KITTI (single image data)
         
-        scaled_im = torch.as_tensor(cv2.resize(raw_im, (self.img_width, self.img_height), interpolation=cv2.INTER_AREA))
+        scaled_im = torch.as_tensor(cv2.resize(raw_im, (self.width, self.img_height), interpolation=cv2.INTER_AREA))
 
         tgt_view = scaled_im.permute(2, 0, 1)
         return tgt_view
@@ -235,16 +210,17 @@ class SequenceFolder(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         
-        tgt_view, src_views = make_sequence_views(self.imgs[index], self.sequence_length, 416)
+        tgt_view, src_views = make_sequence_views(self.imgs[index], self.sequence_length, self.width)
         intrinsics = make_intrinsics(self.cams[index])
-        # here img shape is (h, w, ch)
+        """At this point images are of the shape (height, width, channels)"""
         
-        image_all = np.concatenate((tgt_view, src_views), axis=2)
-        image_all, intrinsics = data_augmentation(image_all, intrinsics, self.img_height, self.width)
-        
-        tgt_view = np.transpose(image_all[:, :, :3], (2, 0, 1))
-        src_views = np.transpose(image_all[:, :, 3:], (2, 0, 1))
-        
+        image_all = torch.cat([tgt_view, src_views], dim=2)
+        #image_all, intrinsics = data_augmentation(image_all, intrinsics, self.img_height, self.width)
+
+        tgt_view = image_all[:, :, :3].permute(2, 0, 1)
+        src_views = image_all[:, :, 3:].permute(2, 0, 1)
+        #intrinsics = get_multi_scale_intrinsics(intrinsics, 4)
+
         sample = {'tgt_view': tgt_view, 'src_views': src_views, 'intrinsics': intrinsics}
         '''
         Sample Shapes:
@@ -253,7 +229,7 @@ class SequenceFolder(torch.utils.data.Dataset):
         intrinsics: (3, 3)
         '''
         
-        return torch.as_tensor(tgt_view), torch.as_tensor(src_views), torch.as_tensor(intrinsics)
+        return tgt_view, src_views, intrinsics
         
     def __len__(self):
         return len(self.example_names)

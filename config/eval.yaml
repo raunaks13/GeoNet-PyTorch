@@ -1,0 +1,45 @@
+
+is_train: False
+data_workers: 12
+data: /ceph/data/kitti_eigen_full/
+test_data: /ceph/data/kitti_raw/
+sequence_length: 3
+# img_height: 760
+# img_width: 1280
+
+# Both need to be multiples of 16 for generating disparity maps
+img_height: 128
+img_width: 416
+
+# Testing
+save_from_ckpt: True
+ckpt_dir: /ceph/raunaks/lsd-signet/reconstruction/models/aug
+ckpt_index: 135000
+graphs_dir: /ceph/raunaks/lsd-signet/reconstruction/graphs/aug
+learning_rate: 0.0002
+iter: 300000
+batch_size: 4
+save_ckpt_iter: 5000
+
+epochs: 30  #For KITTI: 300000 iters * batch_size/num_images ~ 29.8
+#epochs: 40 #For SYNTHIA: ballpark figure
+
+epoch_size: 100
+seed: 8964
+dispnet_encoder: 'VGG-16'
+disparity_scale_normalize: False
+momentum: 0.9
+beta: 0.999
+weight_decay: 0.9
+epoch: 1000
+flow_scale_factor: 0.1
+num_scales: 4
+
+alpha_recon_image: 0.85
+lambda_rw: 1
+lambda_ds: 0.5
+lambda_fw: 1
+lambda_fs: 0.2
+lambda_gc: 0.2
+geometric_consistency_alpha: 1
+geometric_consistency_beta: 1

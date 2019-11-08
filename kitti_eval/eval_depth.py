@@ -41,11 +41,12 @@ def convert_disps_to_depths_stereo(gt_disparities, pred_depths):
 
 def main():
     load_gt_from_file=False
-    load_gt_dir = "/ceph/raunaks/GeoNet-PyTorch/reconstruction/models/gt_data/"
+    #load_gt_dir = "/ceph/raunaks/GeoNet-PyTorch/reconstruction/models/gt_data/"
+    load_gt_dir = "/ceph/raunaks/KITTI_GT_DATA/"
     
-    if os.path.exists(load_gt_dir + "gt_depth.npy"):
+    if os.path.exists(load_gt_dir + "gt_depths.npy"):
         load_gt_from_file=True
-        loaded_gt_depths=np.load(load_gt_dir + "gt_depth.npy")
+        loaded_gt_depths=np.load(load_gt_dir + "gt_depths.npy")
     
     pred_depths = np.load(args.pred_file)
     print(len(pred_depths))
@@ -69,7 +70,7 @@ def main():
         pred_depths_resized = []
         
         #Temporary fix: Let num_test equal len(pred_depths)
-        #num_test = len(pred_depths)
+        num_test = len(pred_depths)
         for t_id in range(num_test):
             if load_gt_from_file:
                 img_size_h, img_size_w = loaded_gt_depths[t_id].shape
@@ -91,8 +92,8 @@ def main():
             
             pred_depths_resized.append(cv2.resize(pred_depths[t_id], (img_size_w, img_size_h), interpolation = cv2.INTER_LINEAR))
             
-        os.makedirs(load_gt_dir, exist_ok=True)
-        np.save(load_gt_dir + "gt_depth.npy", gt_depths)
+        #os.makedirs(load_gt_dir, exist_ok=True)
+        #np.save(load_gt_dir + "gt_depth.npy", gt_depths)
         
         pred_depths = pred_depths_resized
         
@@ -145,7 +146,7 @@ def main():
         pred_depth[pred_depth > args.max_depth] = args.max_depth
         abs_rel[i], sq_rel[i], rms[i], log_rms[i], a1[i], a2[i], a3[i] = compute_errors(gt_depth[mask], pred_depth[mask])
 
-    print("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}".format('abs_rel', 'sq_rel', 'rms', 'log_rms', 'd1_all', 'a1', 'a2', 'a3'))
-    print("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}".format(abs_rel.mean(), sq_rel.mean(), rms.mean(), log_rms.mean(), d1_all.mean(), a1.mean(), a2.mean(), a3.mean()))
+    print("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}".format('abs_rel', 'sq_rel', 'rms', 'log_rms', 'a1', 'a2', 'a3'))
+    print("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}".format(abs_rel.mean(), sq_rel.mean(), rms.mean(), log_rms.mean(), a1.mean(), a2.mean(), a3.mean()))
 
 main()
